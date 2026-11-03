@@ -36,8 +36,9 @@ check_system() {
     warn "You're not in a Wayland session. On the login screen pick 'Plasma (Wayland)' before using this."
   command -v nvidia-smi >/dev/null || die "NVIDIA driver not found. Install your distro's proprietary NVIDIA driver first, then reboot."
   local gpu cc
-  gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-  cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | sort -rn | head -1 || true)
+  # newest GPU (highest compute capability) decides, and is the one named
+  local best; best=$(nvidia-smi --query-gpu=compute_cap,name --format=csv,noheader 2>/dev/null | sort -t, -k1,1 -rn | head -1 || true)
+  cc=${best%%,*}; gpu=${best#*, }
   if [[ -n "$cc" ]] && awk -v c="$cc" 'BEGIN{exit !(c<7.5)}'; then
     die "$gpu isn't an RTX card. TrueHDR needs an NVIDIA RTX GPU (20-series or newer)."
   fi
