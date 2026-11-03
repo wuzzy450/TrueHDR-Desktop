@@ -1,4 +1,4 @@
-# kwin-truehdr: RTX TrueHDR + RTX Video Super Resolution for the Linux desktop
+# TrueHDR Desktop: RTX TrueHDR + RTX Video Super Resolution for Linux
 
 NVIDIA's **RTX Video HDR** (AI SDR→HDR) and **RTX Video Super Resolution** (AI upscaling) for the
 **whole KDE Plasma desktop** on Linux. That covers YouTube, Netflix (DRM video too), mpv, SDR games
@@ -28,44 +28,50 @@ Linux at all.
 GNOME, Hyprland, Sway etc. aren't supported. The effect is a KWin plugin, and those compositors
 have no equivalent hook. AMD/Intel GPUs can't run NVIDIA's networks.
 
-## Install
+## Install (about 10 minutes, mostly waiting)
+
+**1.** Open a terminal: press the Meta (Windows) key, type **Konsole**, press Enter.
+
+**2.** Copy this line, paste it into the terminal with **Ctrl+Shift+V**, and press **Enter**:
 
 ```bash
-git clone https://github.com/wuzzy450/kwin-truehdr
-cd kwin-truehdr
-./install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/wuzzy450/TrueHDR-Desktop/main/get.sh)
 ```
 
-The script:
-1. installs build dependencies with your package manager (pacman / dnf / zypper / apt),
-2. downloads the **NVIDIA Maxine Video Effects SDK 1.3** plus the TrueHDR and VSR features into
-   `~/.local/share/truehdr-desktop/VideoFX` (~4 GB),
-3. builds and installs the KWin effect, the tray app and the `truehdr` command,
-4. turns it on and puts the tray icon in your autostart.
+**3.** Follow what it says. It will:
+- check that your PC can run it (and explain in plain words if it can't),
+- ask for **your password** to install build tools (nothing shows while you type a password, that's normal),
+- open NVIDIA's website so you can get a **free key**. Sign in or make a free account, click
+  **Generate Personal Key** (tick *NGC Catalog* if asked), click **Copy**, then paste it into
+  the terminal and press Enter. NVIDIA requires this. It's free, and you only do it once.
+- download NVIDIA's AI models (~2.5 GB), build and install everything,
+- offer to fix dark-video blotches in Chrome/Edge/Brave (say yes).
 
-**Then log out and back in once.** KWin only loads new effects at login.
+**4.** Turn on HDR: **System Settings → Display & Monitor → your screen → Enable HDR**.
 
-### Getting the SDK (step 2)
-The first run explains this too:
-1. Sign up at <https://ngc.nvidia.com> → your name (top right) → **Setup → Generate API Key**.
-2. Download the **NGC CLI** for Linux AMD64 from <https://org.ngc.nvidia.com/setup/installers/cli>,
-   unzip it and put `ngc` on your `PATH` (e.g. `ln -s ~/ngc-cli/ngc ~/.local/bin/ngc`).
-3. `ngc config set`: paste the key, format `ascii`, pick your org. **Downloads show 404 until
-   this has fully completed.**
-4. Run `./install.sh` again.
+**5.** **Log out and back in** (the installer offers to do this). Then an **HDR** icon shows up next
+to the clock. Left-click turns it on or off, right-click changes brightness and upscaling.
 
-Already have the SDK somewhere else? Set it in kwinrc and build against it:
+### After a big Plasma update
+Plasma updates need a quick rebuild, or TrueHDR stays off (nothing breaks). Paste this, then log out and in:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/wuzzy450/TrueHDR-Desktop/main/get.sh) build
+```
+
+<details><summary>Advanced: install from a git clone / use an SDK you already have</summary>
+
+```bash
+git clone https://github.com/wuzzy450/TrueHDR-Desktop && cd TrueHDR-Desktop && ./install.sh
+```
+`./install.sh build | chromefix | uninstall` run single steps. Already logged in with the NGC CLI?
+The installer reuses it. You can also set `NGC_CLI_API_KEY` beforehand to skip the prompt.
+To use an existing Maxine VideoFX 1.3 SDK (with the `nvvfxtruehdr` and `nvvfxvideosuperres` features):
 ```bash
 kwriteconfig6 --file kwinrc --group Effect-truehdr --key SdkPath /path/to/VideoFX
 cmake -S . -B build -DVFX_SDK=/path/to/VideoFX -DCMAKE_INSTALL_PREFIX=/usr && cmake --build build && sudo cmake --install build
 ```
-
-### ⚠️ After every Plasma / KWin update
-The effect uses KWin's internal API, so it must be rebuilt for each KWin version:
-```bash
-./install.sh build
-```
-then log out and in. If you forget, nothing breaks. TrueHDR just doesn't load until you rebuild.
+The installer puts the SDK in `~/.local/share/truehdr-desktop/VideoFX`.
+</details>
 
 ## Using it
 
@@ -125,7 +131,8 @@ with the fix 0 → 0.
 
 **Fix:** start the browser with `--disable-features=WaylandWpColorManagerV1`.
 
-Make a user copy of the launcher, which survives browser updates:
+**The installer does this for you** (or run `~/.local/share/truehdr-desktop/src/install.sh chromefix` any time). To do it by hand,
+make a user copy of the launcher, which survives browser updates:
 ```bash
 # Chrome (use chromium.desktop / microsoft-edge.desktop / brave-browser.desktop for others)
 cp /usr/share/applications/google-chrome.desktop ~/.local/share/applications/
@@ -149,7 +156,7 @@ Notes:
 | Symptom | Fix |
 |---|---|
 | Tray says on, but the picture is unchanged | HDR must be on for that display in System Settings. Log out/in after installing or rebuilding. |
-| Nothing after a Plasma update | `./install.sh build`, then log out/in |
+| Nothing after a Plasma update | run the rebuild line from *After a big Plasma update*, then log out/in |
 | Washed out / blown out in a game | the game already outputs HDR, so turn TrueHDR off |
 | Dark browser video blotchy/blue | the Chrome fix above |
 | Upscaling never/always kicks in | `truehdr upscale log on`, then `journalctl --user -f -o cat \| grep truehdr` shows each reading. `truehdr upscale force 0\|720\|1080\|1440` overrides detection. |
@@ -177,7 +184,7 @@ An optional final pass ports Lilium's *HDR black floor fix* (`truehdr black …`
 
 ## Uninstall
 ```bash
-./install.sh uninstall
+~/.local/share/truehdr-desktop/src/install.sh uninstall
 ```
 This keeps the SDK (`~/.local/share/truehdr-desktop`, ~4 GB) and your settings. Delete them by hand
 if you want them gone.

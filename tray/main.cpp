@@ -270,7 +270,7 @@ int main(int argc, char **argv)
         && !QFile::exists(QStringLiteral("/usr/local/VideoFX/lib/libVideoFX.so"))
         && group().readEntry("SdkPath", QString()).isEmpty()) {
         tray.showMessage(QStringLiteral("TrueHDR Desktop"),
-                         QStringLiteral("NVIDIA Maxine SDK not found. Run ./install.sh sdk from the download folder."),
+                         QStringLiteral("NVIDIA Maxine SDK not found. Run the installer again (see the README)."),
                          QSystemTrayIcon::Warning, 10000);
     }
     return app.exec();
