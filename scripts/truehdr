@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# truehdr — control the TrueHDR Desktop KWin effect.
+#   truehdr on | off | toggle | status
+#   truehdr nits <400-2000>        peak brightness of highlights
+#   truehdr contrast <0-200>       default 100
+#   truehdr saturation <0-200>     default 100
+#   truehdr midgray <10-100>       overall brightness of normal content, default 50
+#   truehdr deband on|off          AI debanding pass (on = default, better quality)
+#   truehdr reset                  back to 1000 nits and defaults
+#   truehdr upscale on|off         AI-upscale fullscreen video/games that aren't native 4K
+#   truehdr upscale quality <n>    17 = faithful (default), 4 = ultra/sharper, 2 = fast; 21/23 sharpen compression blocks
+#   truehdr cleanup fullscreen|always|off   AI removal of compression blocks on native-4K content (default off)
+#   truehdr cleanup quality <n>    2 = medium (default, ~9 ms at 4K), 1 = low (~8 ms), 3 = high (~21 ms)
+#   truehdr upscale log on|off     log every detector reading (for tuning)
+#   truehdr upscale force <0|720|1080|1440>   0 = auto-detect; else always treat content as that height
+#   truehdr black                  show black floor fix settings (Lilium's shader, final pass)
+#   truehdr black off              turn every black floor fix part off
+#   truehdr black gamma <0.5-1.5>|off      >1 darkens shadows, <1 lifts them (below the cut-off)
+#   truehdr black g22 on|off|onlylower     gamma 2.2 emulation (darker shadows than the sRGB curve)
+#   truehdr black cutoff <10-400>          nits: brightness below which gamma/g22 act (default 80)
+#   truehdr black floor <old> [new] [rolloff] | off   remap raised black <old> nits down to <new> (0)
+#   truehdr black floor mode yrgb|rgbpq|rgb
+set -euo pipefail
+
+G=Effect-truehdr
+set_key() { kwriteconfig6 --file kwinrc --group "$G" --key "$1" "$2"; }
+get_key() { kreadconfig6 --file kwinrc --group "$G" --key "$1" --default "$2"; }
+kwin() { qdbus6 org.kde.KWin /Effects "org.kde.kwin.Effects.$1" "${@:2}"; }
+apply() { kwin isEffectLoaded truehdr | grep -q true && kwin reconfigureEffect truehdr || true; }
+dec() { [[ "$2" =~ ^-?[0-9]*\.?[0-9]+$ ]] && awk -v v="$2" -v a="$3" -v b="$4" 'BEGIN{exit !(v>=a && v<=b)}' || { echo "$1 must be a number from $3 to $4" >&2; exit 1; }; }
+black_status() {
+  echo "black floor fix:"
+  echo "  gamma:  $(get_key BffGamma false) (value $(get_key BffGammaValue 1.0), below $(get_key BffGammaCutoff 80) nits)"
+  echo "  g22:    $(get_key BffG22 false) (only lower $(get_key BffG22OnlyLower false), below $(get_key BffG22Cutoff 80) nits)"
+  echo "  floor:  $(get_key BffLower false) (old $(get_key BffOldBlack 0) -> new $(get_key BffNewBlack 0) nits, rolloff $(get_key BffRollOff 10), mode $(get_key BffLowerMode 0))"
+}
+range() { [[ "$2" =~ ^[0-9]+$ ]] && (( $2 >= $3 && $2 <= $4 )) || { echo "$1 must be a whole number from $3 to $4" >&2; exit 1; }; }
+
+case "${1:-status}" in
+  on)
+    kwriteconfig6 --file kwinrc --group Plugins --key truehdrEnabled true
+    set_key EnabledAtStart true
+    kwin isEffectLoaded truehdr | grep -q true || kwin loadEffect truehdr >/dev/null
+    echo "TrueHDR on (Meta+Ctrl+H toggles it)";;
+  off)
+    kwriteconfig6 --file kwinrc --group Plugins --key truehdrEnabled false
+    kwin unloadEffect truehdr; echo "TrueHDR off";;
+  flip)
+    # instant A/B: same as Meta+Ctrl+H. Loads the effect first if needed.
+    if kwin isEffectLoaded truehdr | grep -q true; then
+      qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut ToggleTrueHDR
+      sleep 0.3
+      state=$(journalctl --user -b --no-pager -o cat --since "-5s" 2>/dev/null | grep -oE "truehdr: (on|off)" | tail -1 | cut -d" " -f2)
+    else
+      "$0" on >/dev/null; state=on
+    fi
+    gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify "TrueHDR" 0 video-display "TrueHDR ${state:-toggled}" "$(get_key Luminance 1000) nits" "[]" "{}" 1500 >/dev/null || true;;
+  toggle) kwin isEffectLoaded truehdr | grep -q true && "$0" off || "$0" on;;
+  nits)       range nits "${2:-}" 400 2000;      set_key Luminance "$2";  apply; echo "peak = $2 nits";;
+  contrast)   range contrast "${2:-}" 0 200;     set_key Contrast "$2";   apply; echo "contrast = $2";;
+  saturation) range saturation "${2:-}" 0 200;   set_key Saturation "$2"; apply; echo "saturation = $2";;
+  midgray)    range midgray "${2:-}" 10 100;     set_key MiddleGray "$2"; apply; echo "middle gray = $2";;
+  deband)
+    case "${2:-}" in on) set_key DebandingOff false;; off) set_key DebandingOff true;; *) echo "deband on|off" >&2; exit 1;; esac
+    apply; echo "debanding ${2}";;
+  upscale)
+    case "${2:-}" in
+      on)  set_key Upscale true;;
+      off) set_key Upscale false;;
+      quality) [[ "${3:-}" =~ ^(0|1|2|3|4|16|17|18|19|21|23)$ ]] || { echo "quality: 17 (default), 0-4, 16-19, 21, 23" >&2; exit 1; }; set_key UpscaleQuality "$3";;
+      log) case "${3:-}" in on) set_key LogDetect true;; off) set_key LogDetect false;; *) echo "upscale log on|off" >&2; exit 1;; esac;;
+      force) [[ "${3:-}" =~ ^(0|720|1080|1440)$ ]] || { echo "upscale force 0|720|1080|1440" >&2; exit 1; }; set_key UpscaleForce "$3";;
+      *) echo "upscale on|off|quality <n>|log on|off|force <0|720|1080|1440>" >&2; exit 1;;
+    esac
+    apply; echo "upscale: ${*:2}";;
+  cleanup)
+    case "${2:-}" in
+      fullscreen|always|off) set_key Cleanup "$2";;
+      quality) [[ "${3:-}" =~ ^(1|2|3|4)$ ]] || { echo "cleanup quality 1-4" >&2; exit 1; }; set_key CleanupQuality "$3";;
+      *) echo "cleanup fullscreen|always|off|quality <1-4>" >&2; exit 1;;
+    esac
+    apply; echo "cleanup: ${*:2}";;
+  black)
+    case "${2:-}" in
+      ""|status) black_status; exit 0;;
+      off) for k in BffGamma BffG22 BffLower; do set_key $k false; done;;
+      gamma)
+        if [[ "${3:-}" == off ]]; then set_key BffGamma false
+        else dec gamma "${3:-}" 0.5 1.5; set_key BffGammaValue "$3"; set_key BffGamma true; fi;;
+      g22)
+        case "${3:-}" in
+          on) set_key BffG22 true; set_key BffG22OnlyLower false;;
+          onlylower) set_key BffG22 true; set_key BffG22OnlyLower true;;
+          off) set_key BffG22 false;;
+          *) echo "black g22 on|off|onlylower" >&2; exit 1;;
+        esac;;
+      cutoff) dec cutoff "${3:-}" 10 400; set_key BffGammaCutoff "$3"; set_key BffG22Cutoff "$3";;
+      floor)
+        case "${3:-}" in
+          off) set_key BffLower false;;
+          mode) case "${4:-}" in yrgb) set_key BffLowerMode 0;; rgbpq) set_key BffLowerMode 1;; rgb) set_key BffLowerMode 2;; *) echo "black floor mode yrgb|rgbpq|rgb" >&2; exit 1;; esac;;
+          *) dec "old black" "${3:-}" 0 0.5; set_key BffOldBlack "$3"
+             if [[ -n "${4:-}" ]]; then dec "new black" "$4" -0.1 0.1; set_key BffNewBlack "$4"; fi
+             if [[ -n "${5:-}" ]]; then dec rolloff "$5" 1 50; set_key BffRollOff "$5"; fi
+             set_key BffLower true;;
+        esac;;
+      *) sed -n '/truehdr black /p' "$0" | sed 's/^# *//'; exit 1;;
+    esac
+    apply; black_status;;
+  reset)
+    for k in Luminance=1000 Contrast=100 Saturation=100 MiddleGray=50 DebandingOff=false Upscale=true UpscaleQuality=17 Cleanup=off; do set_key "${k%%=*}" "${k#*=}"; done
+    apply; echo "reset to defaults (1000 nits)";;
+  status)
+    echo "loaded:     $(kwin isEffectLoaded truehdr)"
+    echo "nits:       $(get_key Luminance 1000)"
+    echo "contrast:   $(get_key Contrast 100)"
+    echo "saturation: $(get_key Saturation 100)"
+    echo "midgray:    $(get_key MiddleGray 50)"
+    echo "debandOff:  $(get_key DebandingOff false)"
+    echo "upscale:    $(get_key Upscale true) (quality $(get_key UpscaleQuality 17), force $(get_key UpscaleForce 0), log $(get_key LogDetect false))"
+    echo "cleanup:    $(get_key Cleanup off) (quality $(get_key CleanupQuality 2))"
+    black_status
+    echo "--- last log lines:"
+    journalctl --user -b --no-pager -o cat 2>/dev/null | grep "truehdr:" | tail -4 || true;;
+  *) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1;;
+esac

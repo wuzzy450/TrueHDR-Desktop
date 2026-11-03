@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.20)
+project(truehdr-desktop VERSION 1.0.0)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(ECM 6.0.0 REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+include(KDEInstallDirs)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets DBus)
+find_package(KF6 REQUIRED COMPONENTS Config GlobalAccel CoreAddons)
+find_package(KWin REQUIRED COMPONENTS kwin)
+if(KWin_VERSION VERSION_LESS 6.7)
+  message(FATAL_ERROR "KWin ${KWin_VERSION} found; TrueHDR Desktop needs KWin 6.7 or newer (Plasma 6.7+).")
+endif()
+
+# Only headers are needed at build time; the SDK libraries are dlopen()ed at runtime.
+set(VFX_SDK "$ENV{HOME}/.local/share/truehdr-desktop/VideoFX" CACHE PATH "Maxine VideoFX SDK root")
+if(NOT EXISTS "${VFX_SDK}/include/nvVideoEffects.h")
+  message(FATAL_ERROR "Maxine SDK headers not found in ${VFX_SDK}/include. Run ./install.sh sdk first, or pass -DVFX_SDK=/path/to/VideoFX")
+endif()
+
+kcoreaddons_add_plugin(truehdr INSTALL_NAMESPACE "kwin/effects/plugins")
+target_sources(truehdr PRIVATE effect/main.cpp effect/truehdr.cpp effect/resdetect.cpp effect/blackfloor.cpp)
+target_include_directories(truehdr PRIVATE ${VFX_SDK}/include)
+target_compile_definitions(truehdr PRIVATE VFX_SDK_DIR="${VFX_SDK}")
+target_link_libraries(truehdr PRIVATE KWin::kwin KF6::ConfigCore KF6::GlobalAccel Qt6::Gui dl)
+
+add_executable(truehdr-tray tray/main.cpp)
+target_link_libraries(truehdr-tray PRIVATE Qt6::Widgets Qt6::DBus KF6::ConfigCore)
+install(TARGETS truehdr-tray DESTINATION ${KDE_INSTALL_BINDIR})
+install(PROGRAMS scripts/truehdr DESTINATION ${KDE_INSTALL_BINDIR})
+install(FILES data/truehdr-tray.desktop DESTINATION ${KDE_INSTALL_APPDIR})

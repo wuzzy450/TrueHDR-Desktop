@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=TrueHDR Desktop
+Comment=AI SDR-to-HDR and upscaling for the whole KDE desktop (NVIDIA RTX)
+Exec=truehdr-tray
+Icon=video-display
+Categories=Settings;HardwareSettings;

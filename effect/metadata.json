@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Category": "Appearance",
+        "Description": "NVIDIA RTX TrueHDR: AI SDR-to-HDR over the whole desktop on HDR outputs. Toggle with Meta+Ctrl+H or the tray icon.",
+        "EnabledByDefault": false,
+        "License": "GPL-3.0-or-later",
+        "Name": "TrueHDR Desktop"
+    },
+    "org.kde.kwin.effect": {
+        "enabledByDefaultMethod": false
+    }
+}
