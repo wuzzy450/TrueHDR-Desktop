@@ -1,5 +1,7 @@
 # TrueHDR Desktop: RTX TrueHDR + RTX Video Super Resolution for Linux
 
+**Community:** join the [Discord](https://discord.gg/nuvpXycag8) for help and updates · support the project on [Ko-fi](https://ko-fi.com/wuzzy450)
+
 NVIDIA's **RTX Video HDR** (AI SDR→HDR) and **RTX Video Super Resolution** (AI upscaling) for the
 **whole KDE Plasma desktop** on Linux. That covers YouTube, Netflix (DRM video too), mpv, SDR games
 and the desktop itself. Windows only offers this inside Chrome/Edge. NVIDIA doesn't ship it for
@@ -163,6 +165,8 @@ Notes:
 | "CUDA … illegal memory access" in the log | toggle off/on (Meta+Ctrl+H) to reset CUDA. Check `sudo journalctl -k \| grep -i xid` for driver faults |
 | Mouse cursor isn't HDR | expected: it's a separate hardware plane |
 
+Still stuck? Ask on the [Discord](https://discord.gg/nuvpXycag8) and include the output of `truehdr status`.
+
 Logs: `journalctl --user -b -o cat | grep truehdr:`. On any error the effect turns itself off and logs
 why, and KWin keeps running normally.
 
@@ -188,6 +192,9 @@ An optional final pass ports Lilium's *HDR black floor fix* (`truehdr black …`
 ```
 This keeps the SDK (`~/.local/share/truehdr-desktop`, ~4 GB) and your settings. Delete them by hand
 if you want them gone.
+
+## Support
+TrueHDR Desktop is free. If you enjoy it, you can [support it on Ko-fi](https://ko-fi.com/wuzzy450). Questions, bugs and ideas: [Discord](https://discord.gg/nuvpXycag8) or GitHub issues.
 
 ## Credits & licence
 - GPL-3.0-or-later (see `LICENSE`). Built on KWin's effect API (GPL). The black floor pass is a port
