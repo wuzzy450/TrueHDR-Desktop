@@ -297,6 +297,8 @@ TrueHdrEffect::~TrueHdrEffect()
     }
 }
 
+static void publishState(bool on);
+
 void TrueHdrEffect::reconfigure(ReconfigureFlags)
 {
     KSharedConfig::Ptr cfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
@@ -328,10 +330,13 @@ void TrueHdrEffect::reconfigure(ReconfigureFlags)
     qInfo("truehdr: blackfloor g22=%d(%.0f nits%s) gamma=%d(%.3f, %.0f nits) lower=%d(mode %d, %.4f -> %.4f nits, rolloff %.1f)", int(m_bff.g22), m_bff.g22Cutoff, m_bff.g22OnlyLower ? ", only lower" : "", int(m_bff.gamma), m_bff.gammaValue, m_bff.gammaCutoff, int(m_bff.lower), m_bff.lowerMode, m_bff.oldBlack, m_bff.newBlack, m_bff.rollOff);
     m_logDetect = g.readEntry("LogDetect", false);
     const bool startEnabled = g.readEntry("EnabledAtStart", true);
-    static bool first = true;
-    if (first) {
+    // only on this instance's first configure: a later reconfigure must not undo
+    // Meta+Ctrl+H. A member, not a static: KWin keeps the plugin in memory when the
+    // effect is unloaded, and a static would make every reload start switched off.
+    if (m_firstConfigure) {
         m_enabled = startEnabled;
-        first = false;
+        m_firstConfigure = false;
+        publishState(m_enabled);
     }
     effects->makeOpenGLContextCurrent();
     for (auto &[output, t] : m_targets) {
@@ -345,6 +350,15 @@ void TrueHdrEffect::reconfigure(ReconfigureFlags)
     qInfo("truehdr: luminance=%u contrast=%u saturation=%u middleGray=%u debandingOff=%d upscale=%d quality=%u force=%u cleanup=%d(quality %u)",
           m_luminance, m_contrast, m_saturation, m_middleGray, int(m_debandingOff), int(m_upscale), m_upQuality, m_upForce, m_cleanup, m_cleanQuality);
     effects->addRepaintFull();
+}
+
+// The tray reads this to show the real state (Meta+Ctrl+H flips it without the tray knowing).
+static void publishState(bool on)
+{
+    QFile f(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + QStringLiteral("/truehdr-state"));
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        f.write(on ? "on\n" : "off\n");
+    }
 }
 
 void TrueHdrEffect::toggle()
@@ -361,6 +375,7 @@ void TrueHdrEffect::toggle()
     m_failed = false;
     m_upscaleBroken = false;
     qInfo("truehdr: %s", m_enabled ? "on" : "off");
+    publishState(m_enabled);
     effects->addRepaintFull();
 }
 

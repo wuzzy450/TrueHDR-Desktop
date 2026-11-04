@@ -113,6 +113,7 @@ private:
     bool resetCuda();
 
     bool m_enabled = false;
+    bool m_firstConfigure = true;
     bool m_failed = false;
     bool m_cudaReady = false;
     CUstream_st *m_stream = nullptr;

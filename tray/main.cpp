@@ -61,13 +61,42 @@ void set(const char *key, const T &value)
     }
 }
 
+QString stateFile()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + QStringLiteral("/truehdr-state");
+}
+
+// real state: effect loaded AND switched on inside (Meta+Ctrl+H flips the inside switch)
+bool active()
+{
+    if (!loaded()) {
+        return false;
+    }
+    QFile f(stateFile());
+    if (!f.open(QIODevice::ReadOnly)) {
+        return true; // effect from before the state file existed
+    }
+    return !f.readAll().startsWith("off");
+}
+
 void setEnabled(bool on)
 {
     KSharedConfig::Ptr cfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
-    cfg->group(QStringLiteral("Plugins")).writeEntry("truehdrEnabled", on);
-    cfg->group(QStringLiteral("Effect-truehdr")).writeEntry("EnabledAtStart", true);
+    cfg->group(QStringLiteral("Plugins")).writeEntry("truehdrEnabled", true);
+    cfg->group(QStringLiteral("Effect-truehdr")).writeEntry("EnabledAtStart", on); // remembered at next login
     cfg->sync();
-    kwin().call(on ? QStringLiteral("loadEffect") : QStringLiteral("unloadEffect"), kEffect);
+    if (!loaded()) {
+        if (on) {
+            kwin().call(QStringLiteral("loadEffect"), kEffect); // starts switched on (EnabledAtStart)
+        }
+        return;
+    }
+    if (active() != on) {
+        // the same instant switch as Meta+Ctrl+H: no reload, GPU memory freed while off
+        QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"), QStringLiteral("/component/kwin"),
+                             QStringLiteral("org.kde.kglobalaccel.Component"));
+        accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("ToggleTrueHDR"));
+    }
 }
 
 QIcon makeIcon(bool on)
@@ -240,7 +269,7 @@ int main(int argc, char **argv)
     menu.addAction(QStringLiteral("Quit tray"), &app, &QApplication::quit);
 
     auto refresh = [&] {
-        const bool on = loaded();
+        const bool on = active();
         const KConfigGroup g = group();
         const int nits = g.readEntry("Luminance", 1000);
         onOff->setChecked(on);
@@ -254,7 +283,7 @@ int main(int argc, char **argv)
     QObject::connect(&menu, &QMenu::aboutToShow, refresh);
     QObject::connect(&tray, &QSystemTrayIcon::activated, [&](QSystemTrayIcon::ActivationReason r) {
         if (r == QSystemTrayIcon::Trigger) { // left click toggles
-            setEnabled(!loaded());
+            setEnabled(!active());
             QTimer::singleShot(300, refresh);
         }
     });
