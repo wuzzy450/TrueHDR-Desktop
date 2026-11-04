@@ -682,7 +682,9 @@ void TrueHdrEffect::detect(Target &t, LogicalOutput *screen)
         if (r.textured) { // flat frames (black, fades) say nothing; keep the last decision
             // majority vote over the last 8 readings (~3 s): change only when DetectVotes (default 7) agree,
             // so captions, menus or a borderline scene can't make it flip back and forth
-            t.recent.push_back(r.factor);
+            const double f = r.factor;
+            t.nativeRun = f == 1.0 ? t.nativeRun + 1 : 0;
+            t.recent.push_back(f);
             if (t.recent.size() > 8) {
                 t.recent.pop_front();
             }
@@ -691,7 +693,12 @@ void TrueHdrEffect::detect(Target &t, LogicalOutput *screen)
                 ++votes[f];
             }
             for (const auto &[f, count] : votes) {
-                if (count >= m_detectVotes && f != t.factor) {
+                // Stretched -> native only after ~8 s of native readings in a row: some
+                // scenes of a soft stream (e.g. YouTube 1440p) lose the stretch fingerprint
+                // for a few seconds, and upscaling shouldn't switch on and off with them.
+                // Leaving fullscreen still resets at once; stretch -> stretch stays fast.
+                const bool toNative = f == 1.0 && t.factor > 1.01;
+                if (count >= m_detectVotes && f != t.factor && (!toNative || t.nativeRun >= 24)) {
                     t.factor = f;
                     qInfo("truehdr: %s content is %s%s", qPrintable(screen->name()), heightLabel(t.factor, t.size.height()).constData(),
                           t.factor > 1.0 ? ", upscaling" : "");

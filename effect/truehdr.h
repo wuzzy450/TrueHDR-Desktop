@@ -83,6 +83,7 @@ private:
         double candidate = 1.0;
         int streak = 0;
         std::deque<double> recent; // last few detector readings, for a majority vote
+        int nativeRun = 0; // consecutive "native" readings while upscaling (to drop back only after ~8 s)
 
         // AI upscaling: sdrTex -> lowTex (source resolution) -> VSR -> TrueHDR input
         double vsrFactor = 0; // factor the VSR objects below are built for (1 = same-size cleanup)
