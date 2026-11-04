@@ -204,11 +204,11 @@ Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double
         // hiBand: a 4x stretch (also locked about 3/8) has no detail left up there
         res.factor = 4.0 / 3.0;
     } else if (res.topDetail < topNative && res.period3 > threshold) {
-        // Which phase of the 3-px rhythm is sharpest tells 3x from 1.5x (reliable on
-        // real video). A 3x stretch also leaves almost no detail above 1/6 cycles/px,
-        // which catches the clean (uncompressed) 3x cases the phase rule misses. Real
-        // video adds compression noise up there, so detail never overrides toward 1.5x.
-        res.factor = (oddIsSharp || res.hiBand < 0.05) ? 3.0 : 1.5;
+        // Which phase of the 3-px rhythm is sharpest tells 3x from 1.5x. Measured
+        // live on YouTube 720p and 1440p: right every time. (Surviving fine detail
+        // looked promising on clean photos but misleads both ways on real video:
+        // compression noise adds it to 720p, soft encodes remove it from 1440p.)
+        res.factor = oddIsSharp ? 3.0 : 1.5;
     }
     return res;
 }
