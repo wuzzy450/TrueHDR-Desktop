@@ -209,7 +209,7 @@ QByteArray heightLabel(double factor, int screenHeight)
     if (factor < 1.01) {
         return QByteArrayLiteral("native");
     }
-    return QByteArray::number(qRound(screenHeight / factor)) + "p (" + QByteArray::number(factor, 'g', 2) + "x)";
+    return QByteArray::number(qRound(screenHeight / factor)) + "p (" + QByteArray::number(factor, 'g', 3) + "x)";
 }
 
 // TrueHDR writes absolute luminance in PQ; describe it so KWin maps nits 1:1.
@@ -323,6 +323,7 @@ void TrueHdrEffect::reconfigure(ReconfigureFlags)
     m_detectVotes = std::clamp(g.readEntry("DetectVotes", 7), 5, 8);
     m_detect2xThreshold = g.readEntry("Detect2xThreshold", 0.55);
     m_detectTopNative = g.readEntry("DetectTopNative", resdetect::kTopDetailNative);
+    m_detect43Threshold = g.readEntry("Detect43Threshold", resdetect::kLock43);
     m_bff.read(g);
     qInfo("truehdr: blackfloor g22=%d(%.0f nits%s) gamma=%d(%.3f, %.0f nits) lower=%d(mode %d, %.4f -> %.4f nits, rolloff %.1f)", int(m_bff.g22), m_bff.g22Cutoff, m_bff.g22OnlyLower ? ", only lower" : "", int(m_bff.gamma), m_bff.gammaValue, m_bff.gammaCutoff, int(m_bff.lower), m_bff.lowerMode, m_bff.oldBlack, m_bff.newBlack, m_bff.rollOff);
     m_logDetect = g.readEntry("LogDetect", false);
@@ -675,7 +676,7 @@ void TrueHdrEffect::detect(Target &t, LogicalOutput *screen)
     if (t.job.valid() && t.job.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const resdetect::Result r = t.job.get();
         if (m_logDetect) {
-            qInfo("truehdr: detect textured=%d p2=%.3f p3=%.3f top=%.4f sharp=%d -> %s", int(r.textured), r.period2, r.period3, r.topDetail,
+            qInfo("truehdr: detect textured=%d p2=%.3f p3=%.3f l43=%.3f grid=%.3f hi=%.3f top=%.4f sharp=%d -> %s", int(r.textured), r.period2, r.period3, r.lock43, r.lockGrid, r.hiBand, r.topDetail,
                   int(r.sharpPhase), heightLabel(r.factor, t.size.height()).constData());
         }
         if (r.textured) { // flat frames (black, fades) say nothing; keep the last decision
@@ -719,8 +720,9 @@ void TrueHdrEffect::detect(Target &t, LogicalOutput *screen)
             const double th = m_detectThreshold;
             const double th2 = m_detect2xThreshold;
             const double top = m_detectTopNative;
-            t.job = std::async(std::launch::async, [pixels = std::move(pixels), th, th2, top] {
-                return resdetect::analyse(pixels.data(), th, th2, top);
+            const double th43 = m_detect43Threshold;
+            t.job = std::async(std::launch::async, [pixels = std::move(pixels), th, th2, top, th43] {
+                return resdetect::analyse(pixels.data(), th, th2, top, th43);
             });
             glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
         }

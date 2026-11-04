@@ -52,7 +52,7 @@ double band(const std::vector<double> &p, double f0, double f1)
 }
 } // namespace
 
-Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double topNative)
+Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double topNative, double threshold43)
 {
     const int n = kPatch;
     // luma, with the mean removed
@@ -78,6 +78,13 @@ Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double
     // across every line. Native content gives random phases that average out.
     std::complex<double> pairSum[2];
     double pairMag[2] = {0, 0};
+    // same idea for a 4/3 stretch (1080p on 1440p): the source's spectrum is
+    // mirrored about 3/8 cycles/px, so bins k and 3n/4-k stay phase-locked.
+    // Compression block grids (4/8 px) give a 4-px rhythm but no such lock.
+    std::complex<double> pair43Sum[2];
+    double pair43Mag[2] = {0, 0};
+    std::complex<double> gridSum[2][2];
+    double gridMag[2][2] = {{0, 0}, {0, 0}};
     for (int dir = 0; dir < 2; ++dir) {
         for (int r = 0; r < n; ++r) {
             for (int i = 0; i < n; ++i) {
@@ -92,6 +99,21 @@ Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double
                 const std::complex<double> a(line[k]), b(line[n / 2 - k]);
                 pairSum[dir] += a * b;
                 pairMag[dir] += std::abs(a) * std::abs(b);
+            }
+            for (int k = n / 4 + n / 32; k < 3 * n / 8 - n / 64; ++k) { // stay clear of 3/8: an 8-px block-grid harmonic
+                const std::complex<double> a(line[k]), b(line[3 * n / 4 - k]);
+                pair43Sum[dir] += a * b;
+                pair43Mag[dir] += std::abs(a) * std::abs(b);
+            }
+            // controls: mirror points 5/16 and 7/16 (block grid harmonics, no stretch makes them)
+            for (int c = 0; c < 2; ++c) {
+                const int two = c == 0 ? 5 * n / 8 : 7 * n / 8; // 2 x mirror point
+                for (int k = two / 2 - n / 16; k < two / 2 - n / 128; ++k) {
+                    const std::complex<double> a(line[k]), b(line[two - k]);
+                    if (two - k >= n / 2) continue;
+                    gridSum[c][dir] += a * b;
+                    gridMag[c][dir] += std::abs(a) * std::abs(b);
+                }
             }
         }
     }
@@ -146,7 +168,19 @@ Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double
     for (int dir = 0; dir < 2; ++dir) {
         res.period2 += pairMag[dir] > 0 ? 0.5 * std::abs(pairSum[dir]) / pairMag[dir] : 0.0;
     }
+    res.lock43 = 0;
+    for (int dir = 0; dir < 2; ++dir) {
+        res.lock43 += pair43Mag[dir] > 0 ? 0.5 * std::abs(pair43Sum[dir]) / pair43Mag[dir] : 0.0;
+    }
+    res.lockGrid = 0;
+    for (int c = 0; c < 2; ++c) {
+        for (int dir = 0; dir < 2; ++dir) {
+            res.lockGrid = std::max(res.lockGrid, gridMag[c][dir] > 0 ? std::abs(gridSum[c][dir]) / gridMag[c][dir] : 0.0);
+        }
+    }
     res.period3 = periodicity(3);
+    res.period4 = periodicity(4);
+    res.period2r = periodicity(2);
     res.sharpPhase = oddIsSharp;
     // Finest-detail check: every stretch filter (bilinear, bicubic, Lanczos)
     // removes almost everything near the screen's own pixel frequency (0.5
@@ -154,13 +188,29 @@ Result analyse(const uint8_t *rgba, double threshold, double threshold2x, double
     // the content is native, whatever rhythm it might also show.
     const double base = band(power, 0.03, 0.15);
     res.topDetail = base > 0 ? band(power, 0.45, 0.5) / base * (0.12 / 0.05) : 0.0;
+    // compared with the band just below a 3x stretch's cut-off (1/6), so smooth
+    // pictures (animation, soft film) don't look "detail-free" like a 3x stretch
+    const double below = band(power, 0.1, 0.16);
+    res.hiBand = below > 0 ? band(power, 0.2, 0.3) / below * (0.06 / 0.1) : 0.0;
 
-    if (res.textured && res.topDetail < topNative) {
-        // 2x first: 3x/1.5x stretches barely register on period2 (<0.1), while a
-        // 2x stretch can show a weak 3-px rhythm near the threshold.
-        if (res.period2 > threshold2x) {
-            res.factor = 2.0;
-        } else if (res.period3 > threshold) {
+    if (!res.textured) {
+        return res;
+    }
+    // 2x first: 3x/1.5x stretches barely register on period2 (<0.1), while a
+    // 2x stretch can show a weak 3-px rhythm near the threshold.
+    if (res.topDetail < topNative && res.period2 > threshold2x) {
+        res.factor = 2.0;
+    } else if (res.topDetail < kTopDetail43 && res.lock43 - res.lockGrid > threshold43 && res.hiBand > 0.04) {
+        // hiBand: a 4x stretch (also locked about 3/8) has no detail left up there
+        res.factor = 4.0 / 3.0;
+    } else if (res.topDetail < topNative && res.period3 > threshold) {
+        // 3x leaves nothing above 1/6 cycles/px, 1.5x keeps detail up to 1/3.
+        // In between, fall back to which phase of the rhythm is sharpest.
+        if (res.hiBand < 0.05) {
+            res.factor = 3.0;
+        } else if (res.hiBand > 0.1) {
+            res.factor = 1.5;
+        } else {
             res.factor = oddIsSharp ? 3.0 : 1.5;
         }
     }

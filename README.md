@@ -9,7 +9,7 @@ Linux at all.
 
 - **TrueHDR on everything**: every pixel KWin composites is converted SDR→HDR10 with NVIDIA's
   TrueHDR network, at the peak brightness you choose (400–2000 nits).
-- **Automatic AI upscaling**: when a fullscreen window shows 720p/1080p/1440p content stretched to
+- **Automatic AI upscaling**: when a fullscreen window shows lower-resolution content (480p–1440p) stretched to
   your screen, it's detected, shrunk back to its real size and rebuilt with NVIDIA VSR, then HDR'd.
 - **Lives in the system tray**: starts at login, left-click toggles, right-click for brightness
   and upscaling settings. Also **Meta+Ctrl+H** and a `truehdr` command.
@@ -114,9 +114,20 @@ overwrites them.
 ### Resolutions & refresh rates
 - Works at any output resolution and refresh rate, with mixed HDR + SDR monitors (SDR outputs are
   left alone). Fractional scaling is fine because it works on real device pixels.
-- Upscaling triggers on content stretched **1.5×, 2× or 3×** (720p/1080p/1440p on 4K,
-  720p on 1080p/1440p, 480p on 1440p…). Other ratios, such as 1080p on a 1440p screen, play normally
-  with TrueHDR only.
+- Upscaling works on **any screen size and shape**: 16:9, ultrawide 21:9 and 32:9, 16:10, 4:3 and
+  5:4. It triggers when fullscreen content is stretched **1.33×, 1.5×, 2× or 3×**, letterboxed or
+  pillarboxed. Common cases:
+
+  | Your screen | Gets AI upscaling for |
+  |---|---|
+  | 4K (3840×2160) | 1440p, 1080p, 720p |
+  | 1440p / 3440×1440 ultrawide / 5120×1440 / 2560×1600 | 1080p, 720p, 480p, 640×480 games (not on 2560×1600) |
+  | 1080p / 2560×1080 ultrawide / 1920×1200 | 720p |
+  | 1280×960 / 1280×1024 | 640×480 games |
+
+  Other ratios, like 480p on a 4K screen (4.5×), play normally with TrueHDR only.
+- Tested on 12 real photos × 12 monitor shapes × 3 player scalers, plus H.264-compressed video
+  frames, with `tests/real_matrix.py` and `tests/detect_matrix.cpp`.
 - Cost per frame grows with pixel count. At 4K on an RTX 3080: TrueHDR ≈ 3.6 ms, plus upscaling
   ≈ 3–14 ms depending on quality. That fits 60 Hz easily. At **4K 120 Hz+** you may drop frames
   while upscaling is active. Use `truehdr upscale quality 2` (fast) or turn upscaling off for

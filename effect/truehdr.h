@@ -139,6 +139,7 @@ private:
     int m_detectVotes = 7;
     double m_detect2xThreshold = 0.55; // spectral phase-lock for 1080p
     double m_detectTopNative = 0.008; // finest-detail veto: above this = native
+    double m_detect43Threshold = 0.45; // 4/3 stretch (1080p on 1440p) lock score
     bool m_logDetect = false; // log every detector reading
     bool m_upscaleBroken = false; // VSR failed: keep TrueHDR, stop upscaling until next toggle
     BlackFloorSettings m_bff; // Lilium black floor fix, final pass
